@@ -1,0 +1,26 @@
+简介:
+用户给出pub.dev库的名称，程序会扫描该库2025年整年的版本信息,并输出excel文件.
+
+注意: pub.dev 的 API 是公开的，不需要 access token 认证.
+
+范例说明:
+输入:
+1. 代理配置(可选): 代理用户名: admin, 代理密码: password, httpproxy: http://proxy.example.com:8080, httpsproxy: http://proxy.example.com:8080
+2. 用户给出的库名在当前目录下: ./Flutter三方库.xlsx
+输出:
+1. 输出扫描结果文件: ./Flutter三方库-扫描结果.xlsx
+
+
+工具实现要求:
+1. (可选)需要用proxy来发起请求
+: 输入代理用户名
+: 输入代理密码
+: 输入httpproxy地址
+: 输入httpsproxy地址
+2. 用户输入pub.dev库名称文件
+3. 扫描pub.dev库2025年整年的版本信息（使用pub.dev公开API，无需认证）
+4. 输出扫描结果到excel文件
+
+实现语言: Python
+API端点: https://pub.dev/api/packages/<package_name>
+API文档: https://pub.dev/help/api
