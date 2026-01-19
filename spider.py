@@ -65,67 +65,49 @@ def get_package_versions(package_name, proxies):
         return None
 
 
-def filter_versions_last_year(package_data, package_name, proxies):
-    """筛选2025年的版本信息"""
+def get_latest_version(package_data, package_name, proxies):
+    """获取最新版本信息"""
     if not package_data or 'versions' not in package_data:
         return []
     
-    # 2025年1月1日 00:00:00 UTC
-    year_2025_start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    # 2026年1月1日 00:00:00 UTC
-    year_2025_end = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    versions_info = []
-    
     versions = package_data.get('versions', [])
     
-    for version_data in versions:
-        try:
-            # 从版本数据中获取版本号和发布时间
-            version = version_data.get('version', '')
-            publish_time = version_data.get('published', '')
-            pubspec = version_data.get('pubspec', {})
-            
-            # 检查是否有发布时间
-            if not publish_time:
-                continue
-            
-            # 解析发布时间
-            try:
-                publish_date = datetime.fromisoformat(publish_time.replace('Z', '+00:00'))
-                # 检查是否在2025年
-                if not (year_2025_start <= publish_date < year_2025_end):
-                    continue
-            except:
-                # 无法解析时间，跳过
-                continue
-            
-            # 获取描述和依赖信息
-            description = pubspec.get('description', '')
-            
-            # 获取作者信息
-            author_info = pubspec.get('author', '') or pubspec.get('authors', [])
-            if isinstance(author_info, list):
-                author = author_info[0] if author_info else ''
-            else:
-                author = str(author_info)
-            
-            # 获取依赖数量
-            dependencies = len(pubspec.get('dependencies', {}))
-            
-            versions_info.append({
-                'version': version,
-                'publish_time': publish_time,
-                'description': description,
-                'author': author,
-                'dependencies': dependencies
-            })
-        except Exception as e:
-            # 静默处理错误，不打印
-            continue
+    if not versions:
+        return []
     
-    # 按发布时间排序
-    versions_info.sort(key=lambda x: x.get('publish_time', ''), reverse=True)
-    return versions_info
+    # 获取最新版本（版本列表的最后一个）
+    version_data = versions[-1]
+    
+    try:
+        # 从版本数据中获取版本号和发布时间
+        version = version_data.get('version', '')
+        publish_time = version_data.get('published', '')
+        pubspec = version_data.get('pubspec', {})
+        
+        # 获取描述和依赖信息
+        description = pubspec.get('description', '')
+        
+        # 获取作者信息
+        author_info = pubspec.get('author', '') or pubspec.get('authors', [])
+        if isinstance(author_info, list):
+            author = author_info[0] if author_info else ''
+        else:
+            author = str(author_info)
+        
+        # 获取依赖数量
+        dependencies = len(pubspec.get('dependencies', {}))
+        
+        version_info = {
+            'version': version,
+            'publish_time': publish_time,
+            'description': description,
+            'author': author,
+            'dependencies': dependencies
+        }
+        return [version_info]
+    except Exception as e:
+        # 静默处理错误，不打印
+        return []
 
 
 def scan_single_package(package_name, proxies, lock, progress):
@@ -134,9 +116,12 @@ def scan_single_package(package_name, proxies, lock, progress):
         package_data = get_package_versions(package_name, proxies)
         
         if package_data:
-            versions = filter_versions_last_year(package_data, package_name, proxies)
+            versions = get_latest_version(package_data, package_name, proxies)
             result = versions
-            status_msg = f"✓ 找到 {len(versions)} 个2025年的版本"
+            if versions:
+                status_msg = f"✓ 找到最新版本: {versions[0]['version']}"
+            else:
+                status_msg = "✓ 未找到版本"
         else:
             result = None
             status_msg = "✗ 获取失败"
@@ -171,7 +156,7 @@ def write_results_to_excel(results, output_file):
         if versions is None:
             ws1.append([package_name, '查找失败', '', '', '', ''])
         elif not versions:
-            ws1.append([package_name, '未找到2025年的版本', '', '', '', ''])
+            ws1.append([package_name, '未找到版本', '', '', '', ''])
         else:
             for version_info in versions:
                 ws1.append([
@@ -198,14 +183,16 @@ def write_results_to_excel(results, output_file):
     
     # 第二个sheet：统计信息
     ws2 = wb.create_sheet(title="版本统计")
-    ws2.append(['库名', '2025年发布版本数量'])
+    ws2.append(['库名', '最新版本'])
     
     # 写入统计数据
     for package_name, versions in results.items():
         if versions is None:
             ws2.append([package_name, '查找失败'])
+        elif not versions:
+            ws2.append([package_name, '未找到版本'])
         else:
-            ws2.append([package_name, len(versions)])
+            ws2.append([package_name, versions[0]['version']])
     
     # 调整统计页列宽
     for column in ws2.columns:
@@ -291,13 +278,15 @@ def main():
     write_results_to_excel(results, output_file)
     
     # 统计信息
-    total_versions = sum(len(versions) for versions in results.values() if versions is not None)
+    success_count = sum(1 for versions in results.values() if versions is not None and versions)
     failed_count = sum(1 for versions in results.values() if versions is None)
+    not_found_count = sum(1 for versions in results.values() if versions is not None and not versions)
     print("\n" + "=" * 60)
     print("扫描完成!")
     print(f"共扫描 {len(packages)} 个pub.dev包")
+    print(f"成功获取 {success_count} 个包的最新版本")
     print(f"查找失败 {failed_count} 个pub.dev包")
-    print(f"找到 {total_versions} 个版本")
+    print(f"未找到版本 {not_found_count} 个pub.dev包")
     print("=" * 60)
 
 
